@@ -1,0 +1,92 @@
+diff --git a/drivers/net/ethernet/allwinner/gmac/gmac_core.c b/drivers/net/ethernet/allwinner/gmac/gmac_core.c
+index 55f9860..120b306 100644
+--- a/drivers/net/ethernet/allwinner/gmac/gmac_core.c
++++ b/drivers/net/ethernet/allwinner/gmac/gmac_core.c
+@@ -51,7 +51,7 @@
+ #include "gmac_desc.h"
+ #include "gmac_ethtool.h"
+ 
+-#undef GMAC_DEBUG
++#define GMAC_DEBUG
+ #ifdef GMAC_DEBUG
+ #define DBG(nlevel, klevel, fmt, args...) \
+ 		((void)(netif_msg_##nlevel(priv) && \
+@@ -814,6 +814,50 @@ static void gmac_check_ether_addr(struct gmac_priv *priv)
+ 
+ }
+ 
++int gmac_ksz_mdio_register(struct net_device *dev)
++{
++	int phy_addr;
++	int phy_mode;
++	char phy_id[MII_BUS_ID_SIZE];
++	char bus_id[MII_BUS_ID_SIZE];
++	struct phy_device *phydev;
++	struct mii_bus *ksz_bus;
++	struct gmac_priv *priv = netdev_priv(dev);
++	char *irq_str = NULL;
++
++	phy_addr = 0;
++	phy_mode = priv->plat->phy_interface;
++	snprintf(bus_id, MII_BUS_ID_SIZE, "sw.%d", 0);
++	snprintf(phy_id, MII_BUS_ID_SIZE, PHY_ID_FMT, bus_id, phy_addr);
++	//phydev = phy_attach(dev, phy_id, 0, phy_mode);
++	phydev = phy_connect(dev, phy_id, &gmac_adjust_link, 0, phy_mode);
++	if (IS_ERR(phydev)) {
++		pr_warning("gmac ksz: failed to attach to %s %s", bus_id, phy_id);
++		return -1;
++	}
++	pr_warning("gmac ksz: attach to %s %s", bus_id, phy_id);
++	pr_warning("gmac ksz: phy speed %d", phydev->speed);
++
++	switch (phydev->irq) {
++	case PHY_POLL:
++		irq_str = "POLL";
++		break;
++	case PHY_IGNORE_INTERRUPT:
++		irq_str = "IGNORE";
++		break;
++	default:
++		break;
++	}
++	pr_info("gmac ksz: %s: PHY ID %08x at %d IRQ %s (%s)\n",
++		dev->name, phydev->phy_id, 0,
++		irq_str, dev_name(&phydev->dev));
++	ksz_bus = phydev->bus;
++	priv->mii = ksz_bus;
++	//dev->phydev = phydev;
++
++	return 0;
++}
++
+ /**
+  *  gmac_open - open entry point of the driver
+  *  @dev : pointer to the device structure.
+@@ -832,7 +876,8 @@ static int gmac_open(struct net_device *ndev)
+ 	//gmac_check_ether_addr(priv);
+ 
+ 	/* MDIO bus Registration */
+-	ret = gmac_mdio_register(ndev);
++	gmac_ksz_mdio_register(ndev);
++	/*ret = gmac_mdio_register(ndev);
+ 	if (ret < 0) {
+ 		pr_debug("%s: MDIO bus (id: %d) registration failed",
+ 			 __func__, priv->plat->bus_id);
+@@ -843,7 +888,7 @@ static int gmac_open(struct net_device *ndev)
+ 	if (unlikely(ret)) {
+ 		pr_err("%s: Cannot attach to PHY (error: %d)\n", __func__, ret);
+ 		goto out_err;
+-	}
++	}*/
+ 
+ 	/* Create and initialize the TX/RX descriptors chains. */
+ 	priv->dma_tx_size = GMAC_ALIGN(dma_txsize);
+@@ -965,7 +1010,7 @@ static int gmac_release(struct net_device *ndev)
+ #ifdef CONFIG_GMAC_DEBUG_FS
+ 	gmac_exit_fs();
+ #endif
+-	gmac_mdio_unregister(ndev);
++	//gmac_mdio_unregister(ndev);
+ 	gmac_clk_ctl(priv, 0);
+ 
+ 	return 0;
